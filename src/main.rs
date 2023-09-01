@@ -11,27 +11,7 @@ use aes_gcm_siv::{
     Nonce, // Or `Aes128GcmSiv`
 };
 
-use rand::{CryptoRng, RngCore};
-struct MyRng7;
-impl RngCore for MyRng7 {
-    fn next_u32(&mut self) -> u32 {
-        7
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        7
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        dest.fill(7);
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        Ok(self.fill_bytes(dest))
-    }
-}
-
-impl CryptoRng for MyRng7 {}
+use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arg = args().collect::<Vec<_>>();
@@ -61,8 +41,10 @@ fn encrypt(file: &str, dest_file: &str, password: &str) -> Result<(), Box<dyn Er
     let mut reader = BufReader::new(file);
     let mut buffer = Vec::with_capacity(1024);
     reader.read_to_end(&mut buffer).unwrap();
-    let key = Aes256GcmSiv::generate_key(&mut MyRng7);
-    let cipher = Aes256GcmSiv::new(&key);
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes());
+    let result = hasher.finalize();
+    let cipher = Aes256GcmSiv::new(&result);
     let mut unique_string = password.as_bytes().to_vec();
     unique_string.resize(12, 0);
     let nonce = Nonce::from_slice(unique_string.as_ref()); // 96-bits; unique per message
@@ -81,9 +63,10 @@ fn decrypt(file: &str, dest_file: &str, password: &str) -> Result<(), Box<dyn Er
     let mut reader = BufReader::new(file);
     let mut buffer = Vec::with_capacity(1024);
     reader.read_to_end(&mut buffer).unwrap();
-
-    let key = Aes256GcmSiv::generate_key(&mut MyRng7);
-    let cipher = Aes256GcmSiv::new(&key);
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes());
+    let result = hasher.finalize();
+    let cipher = Aes256GcmSiv::new(&result);
     let mut unique_string = password.as_bytes().to_vec();
     unique_string.resize(12, 0);
     let nonce = Nonce::from_slice(unique_string.as_ref()); // 96-bits; unique per message

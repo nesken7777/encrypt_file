@@ -1,5 +1,5 @@
 [package]
-name = "encrypt_file"
+name = "encrypt-file"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 aes-gcm-siv = { version = "0.11.1", features = ["std"] }
-rand = "0.8.5"
+sha2 = "0.10.7"
