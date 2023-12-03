@@ -6,11 +6,11 @@ use std::{
 };
 
 use aes_gcm_siv::{
-    aead::{Aead, KeyInit},
-    Aes256GcmSiv,
-    Nonce, // Or `Aes128GcmSiv`
+    aead::{generic_array::GenericArray, Aead, KeyInit},
+    Aes256GcmSiv, Nonce,
 };
 
+use rand::{distributions::Standard, thread_rng, Rng};
 use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -45,14 +45,21 @@ fn encrypt(file: &str, dest_file: &str, password: &str) -> Result<(), Box<dyn Er
     hasher.update(password.as_bytes());
     let result = hasher.finalize();
     let cipher = Aes256GcmSiv::new(&result);
-    let mut unique_string = password.as_bytes().to_vec();
-    unique_string.resize(12, 0);
-    let nonce = Nonce::from_slice(unique_string.as_ref()); // 96-bits; unique per message
+    let mut rng = thread_rng();
+    let mut nonce_vec = (&mut rng)
+        .sample_iter(Standard)
+        .take(12)
+        .collect::<Vec<u8>>();
+    let nonce = Nonce::from_slice(nonce_vec.as_slice()); // 96-bits; unique per message
     let dest_file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(dest_file)?;
     let cipher = cipher.encrypt(nonce, buffer.as_ref())?;
+    let cipher = {
+        nonce_vec.extend_from_slice(&cipher);
+        nonce_vec
+    };
     let mut writer = BufWriter::new(dest_file);
     writer.write_all(&cipher)?;
     Ok(())
@@ -63,18 +70,17 @@ fn decrypt(file: &str, dest_file: &str, password: &str) -> Result<(), Box<dyn Er
     let mut reader = BufReader::new(file);
     let mut buffer = Vec::with_capacity(1024);
     reader.read_to_end(&mut buffer).unwrap();
+    let (nonce, file) = buffer.split_at(12);
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());
     let result = hasher.finalize();
     let cipher = Aes256GcmSiv::new(&result);
-    let mut unique_string = password.as_bytes().to_vec();
-    unique_string.resize(12, 0);
-    let nonce = Nonce::from_slice(unique_string.as_ref()); // 96-bits; unique per message
+    let nonce = GenericArray::from_slice(nonce);
     let dest_file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(dest_file)?;
-    let plain = cipher.decrypt(nonce, buffer.as_ref())?;
+    let plain = cipher.decrypt(nonce, file)?;
     let mut writer = BufWriter::new(dest_file);
     writer.write_all(&plain)?;
     Ok(())
